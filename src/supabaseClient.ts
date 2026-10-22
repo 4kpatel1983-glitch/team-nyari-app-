@@ -19,10 +19,8 @@ export type AppealCase = { id: string; title: string; subtitle?: string; locatio
 export type CaseTransaction = { id: string; caseId: string; name: string; amount: number; date?: string; };
 export type DonorFeed = { id: string; name: string; mobile: string; phone: string; amount: number; date?: string; avatar?: string; location?: string; isVerified?: boolean; };
 
-// ⚡ "અમારા વિશે" માટે
 export type AppContent = { title: string; subtitle: string; description: string; updated_at?: string; };
 
-// ⚡ HOME POPUP
 export type AppPopup = {
   id: string;
   title: string;
@@ -37,7 +35,6 @@ export type AppPopup = {
 
 export const STORAGE_KEYS = { SESSION_ACTIVE: '@nyari/session_active', USER_MOBILE: '@nyari/user_mobile' };
 
-// ⚡ SUPABASE REALTIME
 const liveListeners = new Set<() => void>();
 let liveChannel: any = null;
 let liveStartTimer: ReturnType<typeof setTimeout> | null = null;
@@ -262,7 +259,6 @@ export async function clearSession(): Promise<void> {
 
 export async function keepAlive(): Promise<void> { try { await supabase.from('profiles').select('id', { count: 'exact', head: true }).limit(1); } catch {} }
 
-// ⚡ "અમારા વિશે" નો ડેટા લાવવાનું ફંક્શન
 export async function fetchAppContent(sectionKey: string): Promise<AppContent | null> {
   try {
     const { data, error } = await withTimeout(
@@ -275,7 +271,6 @@ export async function fetchAppContent(sectionKey: string): Promise<AppContent | 
   }
 }
 
-// ⚡ HOME POPUP
 export async function fetchActivePopup(): Promise<AppPopup | null> {
   try {
     const { data, error } = await withTimeout(
