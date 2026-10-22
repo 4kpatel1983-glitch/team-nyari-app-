@@ -261,3 +261,51 @@ export async function fetchAppContent(sectionKey: string): Promise<AppContent | 
     return null;
   }
 }
+
+// ⚡ HOME POPUP (Supabase "app_popups" table)
+export type AppPopup = {
+  id: string;
+  title: string;
+  message: string;
+  image_url?: string | null;
+  button_text?: string | null;
+  button_link?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function fetchActivePopup(): Promise<AppPopup | null> {
+  try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('app_popups')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    );
+    if (error || !data) return null;
+    return data as AppPopup;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function subscribeLivePopups(cb: () => void): () => void {
+  let ch: any = null;
+  try {
+    ch = supabase
+      .channel(`nyari-popups-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_popups' }, () => {
+        try { cb(); } catch {}
+      })
+      .subscribe();
+  } catch (e) {
+    ch = null;
+  }
+  return () => {
+    if (ch) { try { supabase.removeChannel(ch); } catch {} }
+  };
+}
