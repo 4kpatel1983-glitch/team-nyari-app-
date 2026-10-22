@@ -29,7 +29,6 @@ const PAGE_INFO: Record<string, { title: string; subtitle: string }> = {
   donations: { title: 'મારું દાન', subtitle: 'દાન સંબંધિત માહિતી' }
 };
 
-// ⚡ Props માં onGoToAbout ઉમેર્યું
 type ProfileScreenProps = { onLogout?: () => void; onBack?: () => void; onGoToTeam?: () => void; onGoToAbout?: () => void; };
 type LocalProfile = { name: string; imageUri: string | null; locationText: string; pincode?: string; mobile?: string; };
 type LocalMember = { id: string; name: string; mobile: string; address: string; photo: string | null; district: string; taluka: string; city: string; state: string; service: string; role: string; } | null;
@@ -41,6 +40,11 @@ const ProfileScreen = ({ onLogout, onGoToAbout }: ProfileScreenProps) => {
   const [showIDCard, setShowIDCard] = useState(false);
   const [profileData, setProfileData] = useState<LocalProfile | null>(null);
   const [memberData, setMemberData] = useState<LocalMember>(null);
+  
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(15)).current;
   
   const [totalDonated, setTotalDonated] = useState<number>(0);
   const [donationCount, setDonationCount] = useState<number>(0);
@@ -73,6 +77,7 @@ const ProfileScreen = ({ onLogout, onGoToAbout }: ProfileScreenProps) => {
 
   const loadProfile = useCallback(async () => {
     let isMounted = true;
+    setIsProfileLoading(true);
     try {
       const mobile = await getCachedMobile();
       if (!mobile) { return; }
@@ -101,11 +106,22 @@ const ProfileScreen = ({ onLogout, onGoToAbout }: ProfileScreenProps) => {
         const uniqueCases = new Set((donations || []).map(d => d.case_id).filter(Boolean));
         setServiceWorks(uniqueCases.size);
       }
-    } catch (e) {} finally {}
+    } catch (e) {} finally {
+      if (isMounted) setIsProfileLoading(false);
+    }
     return () => { isMounted = false; };
   }, []);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  useEffect(() => {
+    if (!isProfileLoading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 450, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [isProfileLoading]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -170,7 +186,7 @@ const ProfileScreen = ({ onLogout, onGoToAbout }: ProfileScreenProps) => {
     else if (action === 'share') handleShareApp();
     else if (action === 'privacy') setShowPrivacyModal(true);
     else if (action === 'about') { 
-      if (onGoToAbout) onGoToAbout(); // ⚡ અહીંથી નવું પેજ ખૂલશે
+      if (onGoToAbout) onGoToAbout();
     }
     else {
       if (action === 'donations') setShowAllDonations(false);
@@ -270,8 +286,6 @@ const ProfileScreen = ({ onLogout, onGoToAbout }: ProfileScreenProps) => {
                   )}
                 </View>
               )}
-
-              {/* ⚡ 'about' નો બ્લોક અહીંથી કાઢી નાખ્યો છે */}
             </ScrollView>
           </View>
         </View>
@@ -287,79 +301,91 @@ const ProfileScreen = ({ onLogout, onGoToAbout }: ProfileScreenProps) => {
         <TouchableOpacity style={s.topIcon} onPress={() => setShowNotifModal(true)}><Ionicons name="notifications-outline" size={19} color={COLORS.text} /><View style={s.notificationDot} /></TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scroll, { paddingBottom: Math.max(insets.bottom, 22) }]}>
-        <View style={s.profileHero}>
-          <View style={s.heroGlowOne} /><View style={s.heroGlowTwo} />
-          {photoStatus.visible && (
-            <Animated.View style={[s.photoStatusBanner, photoStatus.type === 'error' && s.photoStatusError, { opacity: photoStatusOpacity }]}>
-              <Ionicons name={photoStatus.type === 'success' ? 'checkmark-circle' : 'alert-circle'} size={14} color={photoStatus.type === 'error' ? COLORS.red : COLORS.primary} />
-              <Text style={[s.photoStatusText, { color: photoStatus.type === 'error' ? COLORS.red : COLORS.primaryDark }]}>{photoStatus.message}</Text>
-            </Animated.View>
-          )}
-          <View style={s.profileTopRow}>
-            <View style={s.avatarWrap}>
-              <View style={s.avatar}>
-                {profileData?.imageUri ? (
-                  <Image 
-                    key={`img-${imageVersion}`} 
-                    source={{ uri: `${profileData.imageUri}${profileData.imageUri.includes('?') ? '&' : '?'}v=${imageVersion}` }} 
-                    style={s.avatarImage} 
-                    resizeMode="cover" 
-                  />
-                ) : (
-                  <Ionicons name="person" size={30} color={COLORS.primary} />
-                )}
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scroll, { paddingBottom: Math.max(insets.bottom, 22) }]}>
+          
+          <View style={s.profileHero}>
+            {isProfileLoading ? (
+              <View style={{ height: 160, alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={{ marginTop: 10, color: COLORS.helper, fontSize: 12, fontWeight: '600' }}>પ્રોફાઇલ લોડ થઈ રહી છે...</Text>
               </View>
-              <TouchableOpacity style={s.avatarEdit} onPress={() => setPhotoPickerVisible(true)} disabled={uploadingPhoto}>
-                {uploadingPhoto ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="create" size={12} color={COLORS.primary} />}
-              </TouchableOpacity>
-            </View>
-            <View style={s.profileIdentity}>
-              <Text style={s.welcomeLabel}>નમસ્કાર, સ્વાગત છે</Text>
-              <Text style={s.profileName}>{profileData?.name || 'TEAM NYARI સભ્ય'}</Text>
-              <View style={s.memberPill}><Ionicons name="location-outline" size={12} color={COLORS.primary} /><Text style={s.memberPillText} numberOfLines={1}>{profileData?.locationText || 'સભ્યની વિગતો બાકી'}</Text></View>
-            </View>
-            <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} />
+            ) : (
+              <>
+                <View style={s.heroGlowOne} /><View style={s.heroGlowTwo} />
+                {photoStatus.visible && (
+                  <Animated.View style={[s.photoStatusBanner, photoStatus.type === 'error' && s.photoStatusError, { opacity: photoStatusOpacity }]}>
+                    <Ionicons name={photoStatus.type === 'success' ? 'checkmark-circle' : 'alert-circle'} size={14} color={photoStatus.type === 'error' ? COLORS.red : COLORS.primary} />
+                    <Text style={[s.photoStatusText, { color: photoStatus.type === 'error' ? COLORS.red : COLORS.primaryDark }]}>{photoStatus.message}</Text>
+                  </Animated.View>
+                )}
+                <View style={s.profileTopRow}>
+                  <View style={s.avatarWrap}>
+                    <View style={s.avatar}>
+                      {profileData?.imageUri ? (
+                        <Image 
+                          key={`img-${imageVersion}`} 
+                          source={{ uri: `${profileData.imageUri}${profileData.imageUri.includes('?') ? '&' : '?'}v=${imageVersion}` }} 
+                          style={s.avatarImage} 
+                          resizeMode="cover" 
+                        />
+                      ) : (
+                        <Ionicons name="person" size={30} color={COLORS.primary} />
+                      )}
+                    </View>
+                    <TouchableOpacity style={s.avatarEdit} onPress={() => setPhotoPickerVisible(true)} disabled={uploadingPhoto}>
+                      {uploadingPhoto ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="create" size={12} color={COLORS.primary} />}
+                    </TouchableOpacity>
+                  </View>
+                  <View style={s.profileIdentity}>
+                    <Text style={s.welcomeLabel}>નમસ્કાર, સ્વાગત છે</Text>
+                    <Text style={s.profileName}>{profileData?.name || 'TEAM NYARI સભ્ય'}</Text>
+                    <View style={s.memberPill}><Ionicons name="location-outline" size={12} color={COLORS.primary} /><Text style={s.memberPillText} numberOfLines={1}>{profileData?.locationText || 'સભ્યની વિગતો બાકી'}</Text></View>
+                  </View>
+                  <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} />
+                </View>
+                <View style={s.heroDivider} />
+                <View style={s.profileFooter}>
+                  <View style={{ flex: 1 }}><Text style={s.profileFooterLabel}>મોબાઇલ નંબર</Text><Text style={s.profileFooterValue}>{profileData?.mobile || '—'}</Text></View>
+                  <TouchableOpacity style={s.viewIdButton} onPress={() => setActivePage('id')}><Text style={s.viewIdText}>ID જુઓ</Text><Ionicons name="arrow-forward" size={13} color="#FFFFFF" /></TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
-          <View style={s.heroDivider} />
-          <View style={s.profileFooter}>
-            <View style={{ flex: 1 }}><Text style={s.profileFooterLabel}>મોબાઇલ નંબર</Text><Text style={s.profileFooterValue}>{profileData?.mobile || '—'}</Text></View>
-            <TouchableOpacity style={s.viewIdButton} onPress={() => setActivePage('id')}><Text style={s.viewIdText}>ID જુઓ</Text><Ionicons name="arrow-forward" size={13} color="#FFFFFF" /></TouchableOpacity>
+
+          <View style={s.statsRow}>
+            <StatCard icon="heart-outline" label="કુલ દાન" value={totalDonated > 0 ? `₹${totalDonated.toLocaleString('en-IN')}` : '0'} />
+            <StatCard icon="people-outline" label="કુલ પરિવાર ને મદદ" value={serviceWorks > 0 ? serviceWorks.toString() : '0'} />
+            <StatCard icon="ribbon-outline" label="" value={memberData?.id ? 'સભ્ય' : 'દાતા'} />
           </View>
-        </View>
 
-        <View style={s.statsRow}>
-          <StatCard icon="heart-outline" label="કુલ દાન" value={totalDonated > 0 ? `₹${totalDonated.toLocaleString('en-IN')}` : '0'} />
-          <StatCard icon="people-outline" label="કુલ પરિવાર ને મદદ" value={serviceWorks > 0 ? serviceWorks.toString() : '0'} />
-          <StatCard icon="ribbon-outline" label="" value={memberData?.id ? 'સભ્ય' : 'દાતા'} />
-        </View>
+          <View style={s.sectionHeading}><View style={{ flex: 1 }}><Text style={s.sectionTitle}>એકાઉન્ટ અને સેવાઓ</Text><Text style={s.sectionSubtitle}>તમારી જરૂરિયાત મુજબ પસંદ કરો</Text></View><View style={s.sectionAccent} /></View>
 
-        <View style={s.sectionHeading}><View style={{ flex: 1 }}><Text style={s.sectionTitle}>એકાઉન્ટ અને સેવાઓ</Text><Text style={s.sectionSubtitle}>તમારી જરૂરિયાત મુજબ પસંદ કરો</Text></View><View style={s.sectionAccent} /></View>
+          <View style={s.menuCard}>
+            {MENU.map((item, index) => (
+              <React.Fragment key={item.action}>
+                <TouchableOpacity style={s.menuRow} onPress={() => handleMenuAction(item.action)}>
+                  <View style={[s.menuIcon, { backgroundColor: item.bg }]}><Ionicons name={item.icon as any} size={19} color={item.color} /></View>
+                  <View style={s.menuCopy}><Text style={s.menuTitle}>{item.title}</Text><Text style={s.menuSubtitle}>{item.subtitle}</Text></View>
+                  <View style={s.chevron}><Ionicons name="chevron-forward" size={14} color={COLORS.muted} /></View>
+                </TouchableOpacity>
+                {index !== MENU.length - 1 && <View style={s.menuDivider} />}
+              </React.Fragment>
+            ))}
+          </View>
 
-        <View style={s.menuCard}>
-          {MENU.map((item, index) => (
-            <React.Fragment key={item.action}>
-              <TouchableOpacity style={s.menuRow} onPress={() => handleMenuAction(item.action)}>
-                <View style={[s.menuIcon, { backgroundColor: item.bg }]}><Ionicons name={item.icon as any} size={19} color={item.color} /></View>
-                <View style={s.menuCopy}><Text style={s.menuTitle}>{item.title}</Text><Text style={s.menuSubtitle}>{item.subtitle}</Text></View>
-                <View style={s.chevron}><Ionicons name="chevron-forward" size={14} color={COLORS.muted} /></View>
-              </TouchableOpacity>
-              {index !== MENU.length - 1 && <View style={s.menuDivider} />}
-            </React.Fragment>
-          ))}
-        </View>
+          <TouchableOpacity style={s.logoutButton} onPress={() => setLogoutVisible(true)}>
+            <View style={s.logoutIcon}><Ionicons name="log-out-outline" size={17} color={COLORS.red} /></View>
+            <Text style={s.logoutText}>લૉગઆઉટ</Text><Ionicons name="chevron-forward" size={14} color={COLORS.red} />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={s.logoutButton} onPress={() => setLogoutVisible(true)}>
-          <View style={s.logoutIcon}><Ionicons name="log-out-outline" size={17} color={COLORS.red} /></View>
-          <Text style={s.logoutText}>લૉગઆઉટ</Text><Ionicons name="chevron-forward" size={14} color={COLORS.red} />
-        </TouchableOpacity>
-
-        <View style={s.footer}>
-          <View style={s.footerLogo}><Ionicons name="hand-left" size={13} color={COLORS.primary} /></View>
-          <Text style={s.footerBrand}>TEAM NYARI</Text><View style={s.footerDot} /><Text style={s.footerCaption}>સેવા ભાવથી</Text>
-        </View>
-        <Text style={s.version}>TEAM NYARI • PROFILE</Text>
-      </ScrollView>
+          <View style={s.footer}>
+            <View style={s.footerLogo}><Ionicons name="hand-left" size={13} color={COLORS.primary} /></View>
+            <Text style={s.footerBrand}>TEAM NYARI</Text><View style={s.footerDot} /><Text style={s.footerCaption}>સેવા ભાવથી</Text>
+          </View>
+          <Text style={s.version}>TEAM NYARI • PROFILE</Text>
+        </ScrollView>
+      </Animated.View>
 
       {renderDetail()}
       
