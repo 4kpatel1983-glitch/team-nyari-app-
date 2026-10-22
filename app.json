@@ -2,12 +2,12 @@
   "expo": {
     "name": "TEAM NYARI",
     "slug": "team-nyari",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./asset.png",
     "scheme": "teamnyari",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./asset.png",
       "resizeMode": "contain",
@@ -28,11 +28,7 @@
     },
     "android": {
       "package": "com.teamnyari.app",
-      "versionCode": 1,
-      "adaptiveIcon": {
-        "foregroundImage": "./asset.png",
-        "backgroundColor": "#0E7B6E"
-      },
+      "versionCode": 2,
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
@@ -64,7 +60,9 @@
           "android": {
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0"
+            "buildToolsVersion": "35.0.0",
+            "newArchEnabled": true,
+            "enableHermes": true
           },
           "ios": {
             "deploymentTarget": "15.1"
