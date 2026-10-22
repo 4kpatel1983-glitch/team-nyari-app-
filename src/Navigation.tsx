@@ -3,11 +3,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, BackHandler, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as NativeSplash from 'expo-splash-screen'; // ⚡ સિસ્ટમ સ્પ્લાશ માટે
 
 import { useFonts as usePoppinsFonts, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black } from '@expo-google-fonts/poppins';
 import { useFonts as useHindFonts, HindVadodara_400Regular, HindVadodara_500Medium, HindVadodara_600SemiBold, HindVadodara_700Bold } from '@expo-google-fonts/hind-vadodara';
 
-import SplashScreen from "./SplashScreen";
 import LoginScreen from "./LoginScreen";
 import HomeScreen from "./HomeScreen";
 import TeamScreen from "./TeamScreen";
@@ -19,7 +19,11 @@ import RecentDonorsSection from "./components/RecentDonorsSection";
 import VideoSearch from "./components/VideoSearch";
 import AboutScreen from "./AboutScreen";
 
+// ⚡ SplashScreen ઈમ્પોર્ટ કાઢી નાખ્યું છે
 import { clearSession, fetchProfile, getCachedMobile, isSessionActive, keepAlive, saveSession } from "./supabaseClient";
+
+// ⚡ સ્પ્લાશ સ્ક્રીનને ઓટોમેટિક બંધ થતી રોકો
+NativeSplash.preventAutoHideAsync().catch(() => {});
 
 const ACTIVE = "#0E7B6E";
 const INACTIVE = "#737A77";
@@ -68,7 +72,6 @@ export default function Navigation() {
   const [poppinsLoaded] = usePoppinsFonts({ Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black });
   const [hindLoaded] = useHindFonts({ HindVadodara_400Regular, HindVadodara_500Medium, HindVadodara_600SemiBold, HindVadodara_700Bold });
 
-  const [showSplash, setShowSplash] = useState(true);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [trustedMobile, setTrustedMobile] = useState<string | undefined>(undefined);
@@ -115,7 +118,6 @@ export default function Navigation() {
       setAuthStatus("login");
       
     } catch (error) {
-      console.warn("Session restore failed:", error);
       setAuthStatus("login");
     }
   }, []);
@@ -125,6 +127,17 @@ export default function Navigation() {
     bootStarted.current = true;
     void bootApp();
   }, [bootApp]);
+
+  // ⚡ 2.5 સેકન્ડનો ડિલે આપીને સ્પ્લાશ હાઈડ કરો
+  useEffect(() => {
+    if (poppinsLoaded && hindLoaded && authStatus !== "loading") {
+      const timer = setTimeout(() => {
+        NativeSplash.hideAsync().catch(() => {});
+      }, 2500); // 2.5 સેકન્ડ
+
+      return () => clearTimeout(timer);
+    }
+  }, [poppinsLoaded, hindLoaded, authStatus]);
 
   useEffect(() => {
     if (authStatus !== "main") return;
@@ -191,9 +204,11 @@ export default function Navigation() {
     goBack: () => handleTabChange("team"),
   }), [handleTabChange]);
 
-  if (!poppinsLoaded || !hindLoaded) return <SplashScreen onFinish={() => {}} />;
-  if (showSplash) return <SplashScreen onFinish={() => setShowSplash(false)} />;
-  if (authStatus === "loading") return <View style={styles.loadingCenter}><UniversalSkeleton /></View>;
+  // જ્યાં સુધી ડેટા લોડ ના થાય, ત્યાં સુધી કંઈ રેન્ડર ના કરો (સ્પ્લાશ ચાલુ રહેશે)
+  if (!poppinsLoaded || !hindLoaded || authStatus === "loading") {
+    return null; 
+  }
+
   if (authStatus === "login") return <LoginScreen onLoginSuccess={handleLoginSuccess} trustedMobile={trustedMobile} />;
   if (authStatus === "setup") return <View style={styles.root}><ProfileSetupScreen onComplete={handleProfileSetupComplete} /></View>;
 
@@ -211,7 +226,6 @@ export default function Navigation() {
         {renderTab("team", <TeamScreen navigation={customNavigation} />)}
         {renderTab("about", <AboutScreen />)}
         
-        {/* ⚡ અહીં onGoToAbout ઉમેર્યું છે */}
         {renderTab("profile", 
           <ProfileScreen 
             onBack={() => handleTabChange("home")} 
@@ -278,3 +292,5 @@ const styles = StyleSheet.create({
   teamCapsuleText: { fontSize: 11, fontWeight: "800", color: "#075B46" },
   teamCapsuleTextActive: { color: "#FFFFFF" },
 });
+
+export default React.memo(Navigation);
