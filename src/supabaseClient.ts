@@ -1,5 +1,6 @@
 // src/supabaseClient.ts
 import 'react-native-get-random-values';
+import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { createClient } from '@supabase/supabase-js';
