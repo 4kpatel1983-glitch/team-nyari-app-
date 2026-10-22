@@ -3,11 +3,12 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { Animated, Easing, StatusBar, StyleSheet, Text, TouchableOpacity, View, AppState, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchProfile, fetchTopSponsors, getCachedMobile, onProfileChanged, fetchDonationStats, type Sponsor } from "./supabaseClient";
+import { fetchProfile, fetchTopSponsors, getCachedMobile, onProfileChanged, fetchDonationStats, fetchActivePopup, subscribeLivePopups, type Sponsor, type AppPopup } from "./supabaseClient";
 import { TopDonorsSlider, LiveDonationBanner } from "./components/HomeComponents";
 import RecentDonorsSection from "./components/RecentDonorsSection";
 import VideoDonationCard from "./components/VideoDonationCard";
 import { useLiveDonations } from "./useLiveDonations";
+import PopupModal from "./components/PopupModal";
 
 const COLORS = { background: "#F5F7F8", white: "#FFFFFF", text: "#17272D", muted: "#7A898D", teal: "#0F766E", tealDark: "#064E3B", border: "#E4EBEA" };
 const HEADER_BODY_HEIGHT = 90;
@@ -61,6 +62,9 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
   const [sponsors, setSponsors] = useState<SliderDonor[]>([]);
   const [sponsorsLoading, setSponsorsLoading] = useState(true);
   const [donationStats, setDonationStats] = useState({ total: 0, donationCount: 0 });
+  const [popup, setPopup] = useState<AppPopup | null>(null);
+  const [popupVisible, setPopupVisible] = useState(false);
+  const popupKeyRef = useRef<string>("");
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -113,6 +117,38 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
     return () => subscription.remove();
   }, [loadStats]);
 
+  // ⚡ HOME POPUP: હોમ ખુલતાં જ બતાવો + Supabase માં ફેરફાર થાય તો લાઈવ અપડેટ
+  const loadPopup = useCallback(async (isFirst: boolean) => {
+    try {
+      const p = await fetchActivePopup();
+      if (!p) {
+        popupKeyRef.current = "";
+        setPopupVisible(false);
+        return;
+      }
+      const key = JSON.stringify([p.id, p.title, p.message, p.image_url, p.button_text, p.button_link]);
+      if (isFirst || key !== popupKeyRef.current) {
+        popupKeyRef.current = key;
+        setPopup(p);
+        setPopupVisible(true);
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => loadPopup(true), 500);
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const unsub = subscribeLivePopups(() => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => loadPopup(false), 300);
+    });
+    return () => {
+      clearTimeout(t);
+      if (debounce) clearTimeout(debounce);
+      unsub();
+    };
+  }, [loadPopup]);
+
   const headerHeight = insets.top + HEADER_BODY_HEIGHT;
   const clampedScroll = Animated.diffClamp(scrollY, 0, headerHeight);
   const headerTranslateY = clampedScroll.interpolate({ inputRange: [0, headerHeight], outputRange: [0, -headerHeight], extrapolate: "clamp" });
@@ -161,6 +197,8 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
         <RecentDonorsSection />
         <View style={styles.videoDonationFullWidth}><VideoDonationCard /></View>
       </Animated.ScrollView>
+
+      <PopupModal visible={popupVisible} popup={popup} onClose={() => setPopupVisible(false)} />
     </View>
   );
 };
