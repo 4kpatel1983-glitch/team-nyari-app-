@@ -293,4 +293,3 @@ const styles = StyleSheet.create({
   teamCapsuleTextActive: { color: "#FFFFFF" },
 });
 
-export default React.memo(Navigation);
