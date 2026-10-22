@@ -1,6 +1,6 @@
 // src/components/VideoDonationCard.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, Image, Linking } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, Image, Linking, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
@@ -19,7 +19,7 @@ const DEFAULT_PROOF_TITLE = 'મદદ પરિવાર સુધી પહો
 const DEFAULT_PROOF_STORY =
   'આ પરિવારની પરિસ્થિતિ જાણીને અમે મદદ કરવાનું નક્કી કર્યું હતું. સંજોગોવશાત્ અમે રૂબરૂ જઈ શક્યા નહીં, તેથી ગામના સરપંચશ્રીને મદદની રકમ આપી. તેમણે તે પરિવાર સુધી પહોંચાડી દીધી છે. પુરાવો નીચે ફોટો/વિડિયોમાં જુઓ.';
 
-// created_at + duration thi sachu baki rahelu time (app khole tyare fari full thi shuru nahi thay)
+// created_at + duration thi sachu baki rahelu time
 const getRemainingSeconds = (item: AppealCase): number => {
   if (!item.createdAt) return Math.max(0, item.durationSeconds);
   const end = new Date(item.createdAt).getTime() + item.durationSeconds * 1000;
@@ -64,25 +64,54 @@ const getYouTubeThumbnail = (url: string, quality: 'max' | 'high' = 'high'): str
   return `https://img.youtube.com/vi/${id}/${q}.jpg`;
 };
 
-const CountdownTimer: React.FC<{ durationSeconds: number; isCompleted?: boolean; onExpired?: () => void }> = ({ durationSeconds, isCompleted = false, onExpired }) => {
-  const [remaining, setRemaining] = useState(Math.max(0, durationSeconds));
+// ============================================================
+// 🟢 લાઈવ ટાઈમર (ક્યારેય રીસેટ નહીં થાય તે માટે)
+// ============================================================
+const CountdownTimer: React.FC<{ endTime: number; isCompleted?: boolean; onExpired?: () => void }> = ({ endTime, isCompleted = false, onExpired }) => {
   const firedRef = useRef(false);
+
+  const calculateTime = useCallback(() => {
+    if (isCompleted) return 0;
+    const now = Date.now();
+    const diff = Math.max(0, Math.floor((endTime - now) / 1000));
+    return diff;
+  }, [endTime, isCompleted]);
+
+  const [remaining, setRemaining] = useState(calculateTime);
 
   useEffect(() => {
     firedRef.current = false;
-    setRemaining(Math.max(0, durationSeconds));
-    if (isCompleted || durationSeconds <= 0) return;
+    setRemaining(calculateTime());
 
-    const timer = setInterval(() => setRemaining((prev) => Math.max(0, prev - 1)), 1000);
-    return () => clearInterval(timer);
-  }, [durationSeconds, isCompleted]);
+    if (isCompleted || calculateTime() <= 0) return;
 
-  useEffect(() => {
-    if (remaining === 0 && !isCompleted && !firedRef.current) {
-      firedRef.current = true;
-      onExpired?.();
-    }
-  }, [remaining, isCompleted, onExpired]);
+    const timer = setInterval(() => {
+      const diff = calculateTime();
+      setRemaining(diff);
+      
+      if (diff === 0 && !firedRef.current) {
+        firedRef.current = true;
+        onExpired?.();
+      }
+    }, 1000);
+
+    // ⚡ AppState: જ્યારે એપ બેકગ્રાઉન્ડમાંથી ફરી ખૂલે ત્યારે તરત જ ટાઈમર સિંક કરો
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        const diff = calculateTime();
+        setRemaining(diff);
+        if (diff === 0 && !firedRef.current) {
+          firedRef.current = true;
+          onExpired?.();
+        }
+      }
+    });
+
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [calculateTime, isCompleted, onExpired]);
 
   const expired = isCompleted || remaining <= 0;
   const shown = expired ? 0 : remaining;
@@ -226,7 +255,7 @@ export const YouTubeVideoModal: React.FC<{ visible: boolean; url: string; onClos
 };
 
 // ============================================================
-// PROOF MODAL (નવું: title + story card, amount capsule કાઢી નાખ્યું)
+// PROOF MODAL
 // ============================================================
 export const ProofModal: React.FC<{ visible: boolean; item: AppealCase | null; onClose: () => void; canUpload: boolean }> = ({ visible, item, onClose, canUpload }) => {
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -386,8 +415,13 @@ const DonorAutoSlider = React.memo(({ transactions, frozen = false }: { transact
 
 export const AppealCardItem: React.FC<{ item: AppealCase; onDonate: (i: AppealCase) => void; onVideo: (i: AppealCase) => void; onProof: (i: AppealCase) => void; refreshKey?: number; }> = React.memo(({ item, onDonate, onVideo, onProof, refreshKey = 0 }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const remainingSeconds = useMemo(() => getRemainingSeconds(item), [item.createdAt, item.durationSeconds]);
-  const [expired, setExpired] = useState(Boolean(item.isCompleted || remainingSeconds <= 0));
+  
+  const endTime = useMemo(() => {
+    if (!item.createdAt) return Date.now() + item.durationSeconds * 1000;
+    return new Date(item.createdAt).getTime() + item.durationSeconds * 1000;
+  }, [item.createdAt, item.durationSeconds]);
+
+  const [expired, setExpired] = useState(Boolean(item.isCompleted || endTime <= Date.now()));
 
   useEffect(() => {
     if (item.isCompleted) setExpired(true);
@@ -422,7 +456,7 @@ export const AppealCardItem: React.FC<{ item: AppealCase; onDonate: (i: AppealCa
         </View>
         {!!item.subtitle && <Text style={styles.subtitle} numberOfLines={2}>{item.subtitle}</Text>}
 
-        <CountdownTimer durationSeconds={remainingSeconds} isCompleted={item.isCompleted} onExpired={() => setExpired(true)} />
+        <CountdownTimer endTime={endTime} isCompleted={item.isCompleted} onExpired={() => setExpired(true)} />
 
         <View style={styles.moneyActionRow}>
           <View style={styles.moneyBlock}><Text style={styles.moneyCaption}>{expired ? 'કુલ મળેલી મદદ' : 'અત્યાર સુધી મદદ'}</Text><Text style={[styles.moneyAmount, expired && styles.moneyAmountDone]}>{formatMoney(item.raisedAmount)}</Text></View>
@@ -492,7 +526,6 @@ const VideoDonationCard: React.FC<VideoDonationCardProps> = ({ cases: suppliedCa
     loadPage(0);
   }, [suppliedCases, loadPage]);
 
-  // ---------- LIVE UPDATE: amount + transactions ----------
   const [refreshKey, setRefreshKey] = useState(0);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -515,7 +548,6 @@ const VideoDonationCard: React.FC<VideoDonationCardProps> = ({ cases: suppliedCa
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = setTimeout(silentRefresh, 600);
     });
-    // realtime na chale to backup: darek 12 sec e chupchap refresh
     const poll = setInterval(() => { if (!isLiveHealthy()) silentRefresh(); }, 12000);
     return () => {
       unsub();
