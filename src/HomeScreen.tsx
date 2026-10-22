@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { Animated, Easing, StatusBar, StyleSheet, Text, TouchableOpacity, View, AppState, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ⚡ પોપઅપ ફિક્સ માટે
 import { fetchProfile, fetchTopSponsors, getCachedMobile, onProfileChanged, fetchDonationStats, fetchActivePopup, subscribeLivePopups, type Sponsor, type AppPopup } from "./supabaseClient";
 import { TopDonorsSlider, LiveDonationBanner } from "./components/HomeComponents";
 import RecentDonorsSection from "./components/RecentDonorsSection";
@@ -25,13 +26,14 @@ function sponsorToSlider(s: Sponsor, index: number): SliderDonor {
   };
 }
 
-const SponsorSkeleton = React.memo(() => {
+// ⚡ આખી સ્ક્રીન માટે એક જ મોટું સ્કેલેટન
+const HomePageSkeleton = React.memo(() => {
   const pulse = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ]),
     );
     anim.start();
@@ -41,13 +43,31 @@ const SponsorSkeleton = React.memo(() => {
   const Block = ({ style }: any) => <Animated.View style={[{ backgroundColor: "#E1EBE8", borderRadius: 8 }, style, { opacity: pulse }]} />;
 
   return (
-    <View style={styles.skeletonWrap}>
-      <View style={styles.skeletonTopRow}><Block style={{ width: 110, height: 22, borderRadius: 11 }} /><Block style={{ width: 90, height: 22, borderRadius: 11 }} /></View>
-      <View style={styles.skeletonMainRow}>
-        <Block style={{ width: 104, height: 104, borderRadius: 52 }} />
-        <View style={styles.skeletonInfo}>
-          <Block style={{ width: "75%", height: 22 }} /><Block style={{ width: "55%", height: 14, marginTop: 8 }} /><Block style={{ width: "45%", height: 14, marginTop: 6 }} /><Block style={{ width: "100%", height: 50, marginTop: 10, borderRadius: 12 }} />
+    <View style={sk.pageContainer}>
+      <View style={sk.headerSkeleton}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Block style={{ width: 58, height: 58, borderRadius: 29, marginRight: 12 }} />
+          <View>
+            <Block style={{ width: 100, height: 14, marginBottom: 6 }} />
+            <Block style={{ width: 140, height: 24, marginBottom: 6 }} />
+            <Block style={{ width: 180, height: 12 }} />
+          </View>
         </View>
+        <Block style={{ width: 42, height: 42, borderRadius: 14 }} />
+      </View>
+      <View style={sk.contentSkeleton}>
+        <Block style={{ width: '100%', height: 230, borderRadius: 22, marginBottom: 16 }} />
+        <Block style={{ width: '100%', height: 100, borderRadius: 17, marginBottom: 20 }} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
+          <Block style={{ width: 150, height: 20 }} />
+          <Block style={{ width: 70, height: 24, borderRadius: 12 }} />
+        </View>
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
+          <Block style={{ flex: 1, height: 190, borderRadius: 22 }} />
+          <Block style={{ flex: 1, height: 190, borderRadius: 22 }} />
+        </View>
+        <Block style={{ width: 160, height: 22, marginBottom: 14 }} />
+        <Block style={{ width: '100%', height: 320, borderRadius: 17 }} />
       </View>
     </View>
   );
@@ -60,11 +80,20 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
 
   const [profile, setProfile] = useState<LocalProfile | null>(null);
   const [sponsors, setSponsors] = useState<SliderDonor[]>([]);
-  const [sponsorsLoading, setSponsorsLoading] = useState(true);
   const [donationStats, setDonationStats] = useState({ total: 0, donationCount: 0 });
   const [popup, setPopup] = useState<AppPopup | null>(null);
   const [popupVisible, setPopupVisible] = useState(false);
-  const popupKeyRef = useRef<string>("");
+  const [initialLoading, setInitialLoading] = useState(true);
+  
+  // ⚡ એનિમેશન માટેના વેરિયેબલ્સ
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(15)).current;
+  
+  const popupOpenRef = useRef(false);
+
+  useEffect(() => {
+    popupOpenRef.current = popupVisible;
+  }, [popupVisible]);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -87,12 +116,11 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
     } catch (e) {}
   }, []);
 
-  const loadSponsors = useCallback(async (showLoader: boolean = true) => {
+  const loadSponsors = useCallback(async () => {
     try {
-      if (showLoader) setSponsorsLoading(true);
       const list = await fetchTopSponsors(5);
       setSponsors((list || []).map(sponsorToSlider));
-    } catch (e) { setSponsors([]); } finally { setSponsorsLoading(false); }
+    } catch (e) { setSponsors([]); }
   }, []);
 
   const loadStats = useCallback(async () => {
@@ -103,10 +131,25 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
   }, []);
 
   useEffect(() => {
-    loadProfile(); loadSponsors(true); loadStats(); 
+    const init = async () => {
+      setInitialLoading(true);
+      await Promise.all([loadProfile(), loadSponsors(), loadStats()]);
+      setInitialLoading(false);
+    };
+    init();
+    
     const unsub = onProfileChanged(loadProfile);
     return () => { unsub(); };
   }, [loadProfile, loadSponsors, loadStats]);
+
+  useEffect(() => {
+    if (!initialLoading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 450, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [initialLoading]);
 
   useLiveDonations(loadStats);
 
@@ -117,30 +160,55 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
     return () => subscription.remove();
   }, [loadStats]);
 
-  // ⚡ HOME POPUP: હોમ ખુલતાં જ બતાવો + Supabase માં ફેરફાર થાય તો લાઈવ અપડેટ
-  const loadPopup = useCallback(async (isFirst: boolean) => {
+  // ⚡ સુધારેલું પોપઅપ લોજિક (Date + ID આધારિત - ટેબ બદલવાથી નહીં આવે)
+  const loadPopup = useCallback(async (isLiveUpdate = false) => {
     try {
       const p = await fetchActivePopup();
       if (!p) {
-        popupKeyRef.current = "";
         setPopupVisible(false);
         return;
       }
-      const key = JSON.stringify([p.id, p.title, p.message, p.image_url, p.button_text, p.button_link]);
-      if (isFirst || key !== popupKeyRef.current) {
-        popupKeyRef.current = key;
+
+      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+      const currentKey = `${p.id}_${p.updated_at || p.created_at || 'default'}`;
+
+      try {
+        const savedDataStr = await AsyncStorage.getItem('@last_popup_view');
+        let savedData = savedDataStr ? JSON.parse(savedDataStr) : null;
+
+        // જો આજે જોયું નથી અથવા એડમિને નવું પોપઅપ અપડેટ કર્યું છે
+        if (!savedData || savedData.date !== today || savedData.key !== currentKey) {
+          
+          if (isLiveUpdate && popupOpenRef.current) return;
+
+          setPopup(p);
+          setPopupVisible(true);
+        }
+      } catch (err) {
         setPopup(p);
         setPopupVisible(true);
       }
     } catch (e) {}
   }, []);
 
+  const handleClosePopup = useCallback(async () => {
+    setPopupVisible(false);
+    if (popup) {
+      const today = new Date().toLocaleDateString('en-CA');
+      const currentKey = `${popup.id}_${popup.updated_at || popup.created_at || 'default'}`;
+      
+      try {
+        await AsyncStorage.setItem('@last_popup_view', JSON.stringify({ date: today, key: currentKey }));
+      } catch (err) {}
+    }
+  }, [popup]);
+
   useEffect(() => {
-    const t = setTimeout(() => loadPopup(true), 500);
+    const t = setTimeout(() => loadPopup(false), 600);
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const unsub = subscribeLivePopups(() => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => loadPopup(false), 300);
+      debounce = setTimeout(() => loadPopup(true), 300);
     });
     return () => {
       clearTimeout(t);
@@ -154,54 +222,70 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
   const headerTranslateY = clampedScroll.interpolate({ inputRange: [0, headerHeight], outputRange: [0, -headerHeight], extrapolate: "clamp" });
   const initial = profile?.name?.trim()?.charAt(0)?.toUpperCase() || "";
 
+  if (initialLoading) {
+    return (
+      <View style={styles.root}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+        <HomePageSkeleton />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} translucent={false} />
-      <Animated.View pointerEvents="box-none" style={[styles.fixedHeader, { height: headerHeight, paddingTop: insets.top, transform: [{ translateY: headerTranslateY }] }]}>
-        <View style={styles.headerBody}>
-          <View style={styles.headerLeft}>
-            <Image source={require("../asset.png")} style={styles.logoImage} resizeMode="contain" />
-            <View style={styles.brandContent}>
-              <Text style={styles.brandEyebrow} numberOfLines={1}>TEAM</Text>
-              <Text style={styles.brandTitle} numberOfLines={1}>NYARI</Text>
-              <View style={styles.taglineRow}>
-                <Text style={styles.brandTagline} numberOfLines={1}>સીધી મદદ</Text>
-                <Animated.View style={{ marginHorizontal: 4, transform: [{ scale: heartBeat }] }}><Ionicons name="heart" size={11} color="#E53935" /></Animated.View>
-                <Text style={styles.brandTagline} numberOfLines={1}>દરેક પરિવાર સુધી</Text>
+    <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <View style={styles.root}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} translucent={false} />
+        <Animated.View pointerEvents="box-none" style={[styles.fixedHeader, { height: headerHeight, paddingTop: insets.top, transform: [{ translateY: headerTranslateY }] }]}>
+          <View style={styles.headerBody}>
+            <View style={styles.headerLeft}>
+              <Image source={require("../asset.png")} style={styles.logoImage} resizeMode="contain" />
+              <View style={styles.brandContent}>
+                <Text style={styles.brandEyebrow} numberOfLines={1}>TEAM</Text>
+                <Text style={styles.brandTitle} numberOfLines={1}>NYARI</Text>
+                <View style={styles.taglineRow}>
+                  <Text style={styles.brandTagline} numberOfLines={1}>સીધી મદદ</Text>
+                  <Animated.View style={{ marginHorizontal: 4, transform: [{ scale: heartBeat }] }}><Ionicons name="heart" size={11} color="#E53935" /></Animated.View>
+                  <Text style={styles.brandTagline} numberOfLines={1}>દરેક પરિવાર સુધી</Text>
+                </View>
               </View>
             </View>
+            <View style={styles.headerRight}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.profileBtn} onPress={() => onTabChange?.("profile")}>
+                {profile?.imageUri ? <Image source={{ uri: profile.imageUri }} style={styles.profilePhoto} resizeMode="cover" /> : initial ? <Text style={styles.profileInitial}>{initial}</Text> : <Ionicons name="person" size={19} color={COLORS.white} />}
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.profileBtn} onPress={() => onTabChange?.("profile")}>
-              {profile?.imageUri ? <Image source={{ uri: profile.imageUri }} style={styles.profilePhoto} resizeMode="cover" /> : initial ? <Text style={styles.profileInitial}>{initial}</Text> : <Ionicons name="person" size={19} color={COLORS.white} />}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Animated.View>
+        </Animated.View>
 
-      <Animated.ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} bounces scrollEventThrottle={16}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
-        contentContainerStyle={[styles.content, { paddingTop: headerHeight + 10, paddingBottom: insets.bottom + 24 }]}
-      >
-        {sponsorsLoading ? <SponsorSkeleton /> : sponsors.length > 0 ? <TopDonorsSlider donors={sponsors} variant="sponsor" /> : (
-          // ⚡ જો ડેટા ખાલી હોય તો આ કાર્ડ દેખાશે
-          <View style={styles.emptySponsors}>
-            <View style={styles.emptySponsorsIcon}><Ionicons name="ribbon-outline" size={26} color={COLORS.teal} /></View>
-            <Text style={styles.emptySponsorsTitle}>ટોચના પ્રાયોજક</Text>
-            <Text style={styles.emptySponsorsText}>હાલમાં પ્રાયોજકની માહિતી ઉપલબ્ધ નથી</Text>
-          </View>
-        )}
-        
-        <LiveDonationBanner totalAmount={donationStats.total} totalDonations={donationStats.donationCount} />
-        
-        <RecentDonorsSection />
-        <View style={styles.videoDonationFullWidth}><VideoDonationCard /></View>
-      </Animated.ScrollView>
+        <Animated.ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} bounces scrollEventThrottle={16}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+          contentContainerStyle={[styles.content, { paddingTop: headerHeight + 10, paddingBottom: insets.bottom + 24 }]}
+        >
+          {sponsors.length > 0 ? <TopDonorsSlider donors={sponsors} variant="sponsor" /> : (
+            <View style={styles.emptySponsors}>
+              <View style={styles.emptySponsorsIcon}><Ionicons name="ribbon-outline" size={26} color={COLORS.teal} /></View>
+              <Text style={styles.emptySponsorsTitle}>ટોચના પ્રાયોજક</Text>
+              <Text style={styles.emptySponsorsText}>હાલમાં પ્રાયોજકની માહિતી ઉપલબ્ધ નથી</Text>
+            </View>
+          )}
+          
+          <LiveDonationBanner totalAmount={donationStats.total} totalDonations={donationStats.donationCount} />
+          
+          <RecentDonorsSection />
+          <View style={styles.videoDonationFullWidth}><VideoDonationCard /></View>
+        </Animated.ScrollView>
 
-      <PopupModal visible={popupVisible} popup={popup} onClose={() => setPopupVisible(false)} />
-    </View>
+        <PopupModal visible={popupVisible} popup={popup} onClose={handleClosePopup} />
+      </View>
+    </Animated.View>
   );
 };
+
+const sk = StyleSheet.create({
+  pageContainer: { flex: 1, backgroundColor: COLORS.background, paddingTop: 50 },
+  headerSkeleton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: COLORS.background, marginBottom: 10 },
+  contentSkeleton: { paddingHorizontal: 14, flex: 1 },
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.background }, scroll: { flex: 1 }, content: { paddingHorizontal: 14 },
@@ -219,12 +303,6 @@ const styles = StyleSheet.create({
   profileBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: COLORS.teal, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.tealDark, overflow: "hidden" },
   profilePhoto: { width: "100%", height: "100%" },
   profileInitial: { color: COLORS.white, fontSize: 17, fontWeight: "900", letterSpacing: 0.5, includeFontPadding: false },
-  skeletonWrap: { backgroundColor: COLORS.white, borderRadius: 22, padding: 14, marginTop: 6, marginBottom: 6, borderWidth: 1, borderColor: COLORS.border, marginHorizontal: 4 },
-  skeletonTopRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
-  skeletonMainRow: { flexDirection: "row", gap: 13, alignItems: "flex-start" },
-  skeletonInfo: { flex: 1, minWidth: 0 },
-  
-  // ⚡ ખાલી કાર્ડની ડિઝાઇન
   emptySponsors: { marginTop: 6, marginBottom: 4, paddingVertical: 30, paddingHorizontal: 20, borderRadius: 22, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, alignItems: "center" },
   emptySponsorsIcon: { width: 56, height: 56, borderRadius: 20, backgroundColor: "#E6F5F2", alignItems: "center", justifyContent: "center", marginBottom: 10 },
   emptySponsorsTitle: { fontSize: 15, fontWeight: "800", color: "#0F2E2A", letterSpacing: 0.3 },
