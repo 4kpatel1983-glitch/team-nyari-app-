@@ -19,8 +19,21 @@ export type AppealCase = { id: string; title: string; subtitle?: string; locatio
 export type CaseTransaction = { id: string; caseId: string; name: string; amount: number; date?: string; };
 export type DonorFeed = { id: string; name: string; mobile: string; phone: string; amount: number; date?: string; avatar?: string; location?: string; isVerified?: boolean; };
 
-// ⚡ નવું ટાઇપ અને ફંક્શન "અમારા વિશે" માટે
+// ⚡ "અમારા વિશે" માટે
 export type AppContent = { title: string; subtitle: string; description: string; updated_at?: string; };
+
+// ⚡ HOME POPUP
+export type AppPopup = {
+  id: string;
+  title: string;
+  message: string;
+  image_url?: string | null;
+  button_text?: string | null;
+  button_link?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
 
 export const STORAGE_KEYS = { SESSION_ACTIVE: '@nyari/session_active', USER_MOBILE: '@nyari/user_mobile' };
 
@@ -262,19 +275,7 @@ export async function fetchAppContent(sectionKey: string): Promise<AppContent | 
   }
 }
 
-// ⚡ HOME POPUP (Supabase "app_popups" table)
-export type AppPopup = {
-  id: string;
-  title: string;
-  message: string;
-  image_url?: string | null;
-  button_text?: string | null;
-  button_link?: string | null;
-  is_active: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
-
+// ⚡ HOME POPUP
 export async function fetchActivePopup(): Promise<AppPopup | null> {
   try {
     const { data, error } = await withTimeout(
