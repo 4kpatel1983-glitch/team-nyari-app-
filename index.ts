@@ -1,5 +1,7 @@
-import { registerRootComponent } from 'expo';
+// ⚡ આ લાઈન સૌથી ઉપર જ હોવી જોઈએ
+import 'react-native-reanimated'; 
 
+import { registerRootComponent } from 'expo';
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
