@@ -158,7 +158,7 @@ export const YouTubeVideoModal: React.FC<{ visible: boolean; url: string; onClos
 
   const handleWatchOnYouTube = () => {
     onClose();
-    Linking.openURL(url);
+    Linking.openURL(url).catch(() => {});
   };
 
   const html = useMemo(() => {
@@ -277,7 +277,7 @@ export const ProofModal: React.FC<{ visible: boolean; item: AppealCase | null; o
 
   const openVideo = () => {
     if (getYouTubeId(videoLink)) setVideoOpen(true);
-    else Linking.openURL(videoLink);
+    else Linking.openURL(videoLink).catch(() => {});
   };
 
   return (
@@ -502,24 +502,37 @@ const VideoDonationCard: React.FC<VideoDonationCardProps> = ({ cases: suppliedCa
   const [proofCase, setProofCase] = useState<AppealCase | null>(null);
   const [proofCanUpload, setProofCanUpload] = useState(false);
 
+  // Refs vapri chhe etle loadPage no identity badalto nathi (pehla infinite reload loop thato hato)
+  const loadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const pageRef = useRef(0);
+
   const loadPage = useCallback(async (pageNum: number) => {
-    if (isLoadingMore || (!hasMore && pageNum > 0)) return;
+    if (loadingRef.current) return;
+    if (pageNum > 0 && !hasMoreRef.current) return;
+    loadingRef.current = true;
     if (pageNum > 0) setIsLoadingMore(true);
 
-    const res = await fetchAppealCases(pageNum, 10);
-
-    if (pageNum === 0) {
-      setCases(res);
-      setPage(0);
-    } else {
-      setCases(prev => [...prev, ...res]);
+    try {
+      const res = await fetchAppealCases(pageNum, 10);
+      if (pageNum === 0) {
+        setCases(res);
+      } else {
+        setCases((prev) => {
+          const known = new Set(prev.map((c) => c.id));
+          return [...prev, ...res.filter((c) => !known.has(c.id))];
+        });
+      }
+      pageRef.current = pageNum;
       setPage(pageNum);
+      hasMoreRef.current = res.length === 10;
+      setHasMore(res.length === 10);
+    } finally {
+      loadingRef.current = false;
+      setIsLoadingMore(false);
+      setLoading(false);
     }
-    setHasMore(res.length === 10);
-
-    setIsLoadingMore(false);
-    setLoading(false);
-  }, [isLoadingMore, hasMore]);
+  }, []);
 
   useEffect(() => {
     if (suppliedCases) return;
@@ -583,7 +596,7 @@ const VideoDonationCard: React.FC<VideoDonationCardProps> = ({ cases: suppliedCa
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.flatListContent}
         ListHeaderComponent={Header}
-        onEndReached={() => loadPage(page + 1)}
+        onEndReached={() => loadPage(pageRef.current + 1)}
         onEndReachedThreshold={0.4}
         ListFooterComponent={
           isLoadingMore ? (
