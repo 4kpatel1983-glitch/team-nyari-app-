@@ -1,9 +1,10 @@
 // src/components/RecentDonorsSection.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Modal, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View, useWindowDimensions, Image } from "react-native";
+import { FlatList, Modal, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View, useWindowDimensions, Image, Animated, Easing } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchDonorFeed as fetchDonorFeedFromDB } from "../supabaseClient";
 import { useLiveDonations } from "../useLiveDonations";
+import { SkeletonBox, SkeletonText } from "../SkeletonLoader";
 
 export interface Donor { id: string; name: string; phone?: string; mobile?: string; location?: string; city?: string; date?: string; amount: number; avatar?: string; isVerified?: boolean; }
 
@@ -101,7 +102,6 @@ const DonorSliderCard = React.memo(({ donors, cardWidth }: { donors: Donor[]; ca
         </View>
         <Text style={styles.sliderName} numberOfLines={1}>{getDonorName(donor)}</Text>
         
-        {/* ⚡ ગ્રીન બેકગ્રાઉન્ડ કાઢી નાખ્યો છે */}
         <View style={styles.sliderMetaRow}>
           <Ionicons name="location" size={11} color="#64748B" />
           <Text style={styles.sliderMetaText} numberOfLines={1}>{getDonorLocation(donor)}</Text>
@@ -218,10 +218,46 @@ const DonorHistoryView = ({ donors, onClose }: { donors: Donor[]; onClose: () =>
   );
 };
 
+// ⚡ સ્કેલેટન કોમ્પોનન્ટ (એનિમેશન સાથે)
+const DonorsSkeleton = () => {
+  const pulse = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  const Block = ({ style }: any) => <Animated.View style={[{ backgroundColor: "#E1EBE8", borderRadius: 8 }, style, { opacity: pulse }]} />;
+
+  return (
+    <View style={[styles.section, { paddingHorizontal: 14, paddingVertical: 18 }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+        <View style={{ flex: 1 }}>
+          <Block style={{ width: 130, height: 20, marginBottom: 6 }} />
+          <Block style={{ width: 200, height: 12 }} />
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Block style={{ width: '48%', height: 190, borderRadius: 22 }} />
+        <Block style={{ width: '48%', height: 190, borderRadius: 22 }} />
+      </View>
+    </View>
+  );
+};
+
 const RecentDonorsSection = ({ fullScreen = false, onClose }: { fullScreen?: boolean; onClose?: () => void }) => {
   const [allDonors, setAllDonors] = useState<Donor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+
+  // ⚡ એનિમેશન માટેના વેરિયેબલ્સ
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(10)).current;
 
   const loadDonors = useCallback(async () => {
     const result = await fetchDonorFeed(50); 
@@ -232,28 +268,41 @@ const RecentDonorsSection = ({ fullScreen = false, onClose }: { fullScreen?: boo
   useEffect(() => { loadDonors(); }, [loadDonors]);
   useLiveDonations(loadDonors);
 
+  // ⚡ ડેટા લોડ થાય એટલે Fade-in એનિમેશન ચાલુ કરો
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [loading]);
+
   if (fullScreen) return <DonorHistoryView donors={allDonors} onClose={onClose || (() => {})} />;
-  if (loading && allDonors.length === 0) return null;
+  
+  if (loading && allDonors.length === 0) return <DonorsSkeleton />;
 
   return (
-    <View style={styles.section}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerTextBox}>
-          <Text style={styles.sectionTitle}>બધા દાનવીરો</Text>
-          <Text style={styles.sectionSubtitle}>દિલથી આપેલા સહયોગ માટે આભાર</Text>
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <View style={styles.section}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerTextBox}>
+            <Text style={styles.sectionTitle}>બધા દાનવીરો</Text>
+            <Text style={styles.sectionSubtitle}>દિલથી આપેલા સહયોગ માટે આભાર</Text>
+          </View>
+          {allDonors.length > PREVIEW_COUNT && (
+            <Pressable onPress={() => setShowHistory(true)} style={styles.viewAllPill}>
+              <Text style={styles.viewAllPillText}>View All</Text><Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+            </Pressable>
+          )}
         </View>
-        {allDonors.length > PREVIEW_COUNT && (
-          <Pressable onPress={() => setShowHistory(true)} style={styles.viewAllPill}>
-            <Text style={styles.viewAllPillText}>View All</Text><Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
-          </Pressable>
-        )}
+        <DonorAutoSlider donors={allDonors.slice(0, SLIDER_MAX_CARDS)} />
+        
+        <Modal visible={showHistory} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowHistory(false)}>
+          <DonorHistoryView donors={allDonors} onClose={() => setShowHistory(false)} />
+        </Modal>
       </View>
-      <DonorAutoSlider donors={allDonors.slice(0, SLIDER_MAX_CARDS)} />
-      
-      <Modal visible={showHistory} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowHistory(false)}>
-        <DonorHistoryView donors={allDonors} onClose={() => setShowHistory(false)} />
-      </Modal>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -275,7 +324,6 @@ const styles = StyleSheet.create({
   sliderVerified: { position: "absolute", right: -2, bottom: -2, width: 17, height: 17, borderRadius: 9, backgroundColor: "#475569", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFFFFF" },
   sliderName: { marginTop: 9, color: "#1E293B", fontSize: 12.5, fontWeight: "800", textAlign: "center", width: "100%" },
   
-  // ⚡ ગ્રીન બેકગ્રાઉન્ડ રિમૂવ કરેલું છે
   sliderMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: 5 },
   sliderMetaText: { color: "#64748B", fontSize: 10.5, fontWeight: "600", marginLeft: 3 }, 
 
