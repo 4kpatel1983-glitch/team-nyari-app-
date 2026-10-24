@@ -4,6 +4,7 @@ import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, StatusBar, S
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ⚡ પોપઅપ રીસેટ માટે ઉમેર્યું
 import DonationModal from './components/DonationModal';
 import IDCardModal from './IDCardModal';
 import DonationReceiptModal from './components/DonationReceiptModal';
@@ -419,7 +420,18 @@ const ProfileScreen = ({ onLogout, onGoToAbout }: ProfileScreenProps) => {
             <Text style={s.logoutDialogTitle}>લૉગઆઉટ કરવું છે?</Text><Text style={s.logoutDialogBody}>શું તમે ખરેખર બહાર નીકળવા માંગો છો?</Text>
             <View style={s.logoutActions}>
               <TouchableOpacity style={s.cancelButton} onPress={() => setLogoutVisible(false)}><Text style={s.cancelText}>રહેવા દો</Text></TouchableOpacity>
-              <TouchableOpacity style={s.confirmLogout} onPress={() => { setLogoutVisible(false); onLogout?.(); }}><Text style={s.confirmLogoutText}>લૉગઆઉટ</Text></TouchableOpacity>
+              
+              {/* ⚡ અહીં લોગઆઉટ વખતે પોપઅપની મેમરી ડિલીટ કરવાનું લોજિક ઉમેર્યું છે */}
+              <TouchableOpacity style={s.confirmLogout} onPress={async () => { 
+                setLogoutVisible(false); 
+                try {
+                  await AsyncStorage.removeItem('@last_popup_view'); 
+                } catch (e) {}
+                onLogout?.(); 
+              }}>
+                <Text style={s.confirmLogoutText}>લૉગઆઉટ</Text>
+              </TouchableOpacity>
+
             </View>
           </View>
         </View>
