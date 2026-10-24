@@ -282,7 +282,7 @@ export const Header = () => (
   </View>
 );
 
-/* ટોપ દાનવીરો અને સ્પોન્સર સ્લાઇડર */
+/* ટોપ દાનવીરો અને સ્પોન્સર સ્લાઇડર (Smart Auto-Pause Logic સાથે) */
 export const TopDonorsSlider = ({
   donors,
   variant,
@@ -293,9 +293,10 @@ export const TopDonorsSlider = ({
   const isSponsor = variant === 'sponsor';
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList | null>(null);
+  const [isDragging, setIsDragging] = useState(false); // નવું લોજિક: યુઝર સ્વાઇપ કરે ત્યારે ઓટો-સ્લાઇડ બંધ થાય
 
   useEffect(() => {
-    if (!donors || donors.length <= 1) return;
+    if (!donors || donors.length <= 1 || isDragging) return;
 
     const timer = setInterval(() => {
       setActiveIndex(current => {
@@ -308,7 +309,7 @@ export const TopDonorsSlider = ({
       });
     }, 4000);
     return () => clearInterval(timer);
-  }, [donors]);
+  }, [donors, isDragging]); // isDragging પર ડિપેન્ડ કર્યું
 
   useEffect(() => {
     if (activeIndex >= donors.length) setActiveIndex(0);
@@ -348,12 +349,7 @@ export const TopDonorsSlider = ({
             <BubbleDecoration rank={rank} />
 
             <View style={styles.cardTopRow}>
-              <View
-                style={[
-                  styles.rankPill,
-                  isFirst && styles.rankPillFirst,
-                ]}
-              >
+              <View style={[styles.rankPill, isFirst && styles.rankPillFirst]}>
                 <Ionicons
                   name={isSponsor ? 'ribbon-outline' : 'heart-outline'}
                   size={13}
@@ -385,10 +381,7 @@ export const TopDonorsSlider = ({
             <View style={styles.cardMainRow}>
               <View style={styles.photoArea}>
                 <View
-                  style={[
-                    styles.photoRing,
-                    isFirst && styles.photoRingFirst,
-                  ]}
+                  style={[styles.photoRing, isFirst && styles.photoRingFirst]}
                 >
                   {photo ? (
                     <Image
@@ -398,11 +391,7 @@ export const TopDonorsSlider = ({
                     />
                   ) : (
                     <View style={styles.photoFallback}>
-                      <Ionicons
-                        name="person-outline"
-                        size={34}
-                        color="#91A6A8"
-                      />
+                      <Ionicons name="person-outline" size={34} color="#91A6A8" />
                     </View>
                   )}
                 </View>
@@ -513,10 +502,7 @@ export const TopDonorsSlider = ({
   };
 
   const handleScroll = (event: any) => {
-    const index = Math.round(
-      event.nativeEvent.contentOffset.x / SLIDE_WIDTH,
-    );
-
+    const index = Math.round(event.nativeEvent.contentOffset.x / SLIDE_WIDTH);
     if (index >= 0 && index < donors.length && index !== activeIndex) {
       setActiveIndex(index);
     }
@@ -535,6 +521,8 @@ export const TopDonorsSlider = ({
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onScroll={handleScroll}
+        onScrollBeginDrag={() => setIsDragging(true)} // સ્વાઇપ શરૂ
+        onScrollEndDrag={() => setTimeout(() => setIsDragging(false), 3000)} // સ્વાઇપ પૂરી થયા પછી 3 સેકન્ડ પછી ઓટો-સ્લાઇડ ફરી ચાલુ
         scrollEventThrottle={16}
         getItemLayout={(_, index) => ({
           length: SLIDE_WIDTH,
@@ -571,13 +559,18 @@ type LiveDonationProps = {
   totalDonations?: number;
 };
 
-/* લાઇવ દાન સારાંશ */
+/* લાઇવ દાન સારાંશ (Count-Up Animation સાથે) */
 export const LiveDonationBanner = ({
   totalAmount = 0,
   totalDonations = 0,
 }: LiveDonationProps) => {
   const pulse = useRef(new Animated.Value(1)).current;
+  
+  // કાઉન્ટિંગ એનિમેશન માટે સ્ટેટ
+  const [displayAmount, setDisplayAmount] = useState(0);
+  const [displayDonations, setDisplayDonations] = useState(0);
 
+  // LIVE ડોટ પલ્સ એનિમેશન
   useEffect(() => {
     const animation = Animated.loop(
       Animated.sequence([
@@ -599,6 +592,42 @@ export const LiveDonationBanner = ({
     animation.start();
     return () => animation.stop();
   }, [pulse]);
+
+  // એપ ખૂલે ત્યારે 0 થી ટાર્ગેટ સુધી કાઉન્ટ થવાનું એનિમેશન
+  useEffect(() => {
+    let amountListener: string;
+    let donationListener: string;
+
+    const amountAnim = new Animated.Value(0);
+    const donationAnim = new Animated.Value(0);
+
+    amountListener = amountAnim.addListener(({ value }) => {
+      setDisplayAmount(Math.floor(value));
+    });
+    donationListener = donationAnim.addListener(({ value }) => {
+      setDisplayDonations(Math.floor(value));
+    });
+
+    Animated.parallel([
+      Animated.timing(amountAnim, {
+        toValue: totalAmount,
+        duration: 2500, // 2.5 સેકન્ડમાં નંબર ઉપર જશે
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false, // Text બદલવા માટે false જ રાખવું પડે
+      }),
+      Animated.timing(donationAnim, {
+        toValue: totalDonations,
+        duration: 2500,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start();
+
+    return () => {
+      amountAnim.removeListener(amountListener);
+      donationAnim.removeListener(donationListener);
+    };
+  }, [totalAmount, totalDonations]);
 
   return (
     <View style={styles.donationSection}>
@@ -630,7 +659,9 @@ export const LiveDonationBanner = ({
             </View>
           </View>
 
+          {/* બે અલગ કાર્ડ (યુઝરને બધી માહિતી એકસાથે દેખાય એ માટે બેસ્ટ UI) */}
           <View style={styles.amountRow}>
+            {/* કુલ પ્રાપ્ત રકમ કાર્ડ */}
             <View style={styles.amountCard}>
               <View style={styles.amountTopRow}>
                 <View style={styles.amountIcon}>
@@ -638,7 +669,9 @@ export const LiveDonationBanner = ({
                 </View>
                 <Text style={styles.amountLabel}>કુલ પ્રાપ્ત રકમ</Text>
               </View>
-              <Text style={styles.amountValue}>₹{formatMoney(totalAmount)}</Text>
+              <Text style={styles.amountValue} numberOfLines={1} adjustsFontSizeToFit>
+                ₹{formatMoney(displayAmount)}
+              </Text>
               <View style={styles.amountBottom}>
                 <Ionicons
                   name="checkmark-circle-outline"
@@ -649,6 +682,7 @@ export const LiveDonationBanner = ({
               </View>
             </View>
 
+            {/* કુલ દાન કાર્ડ */}
             <View style={styles.amountCard}>
               <View style={styles.amountTopRow}>
                 <View style={styles.amountIcon}>
@@ -656,8 +690,8 @@ export const LiveDonationBanner = ({
                 </View>
                 <Text style={styles.amountLabel}>કુલ દાન</Text>
               </View>
-              <Text style={styles.amountValueBig}>
-                {formatMoney(totalDonations)}
+              <Text style={styles.amountValueBig} numberOfLines={1} adjustsFontSizeToFit>
+                {formatMoney(displayDonations)}
               </Text>
               <View style={styles.amountBottom}>
                 <Ionicons name="heart-outline" size={12} color="#168575" />
@@ -1269,6 +1303,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     color: '#16786D',
   },
+  // --- બે કાર્ડ (Fixed UI) વાળા સ્ટાઇલ્સ ---
   amountRow: { flexDirection: 'row', gap: 8 },
   amountCard: {
     flex: 1,
