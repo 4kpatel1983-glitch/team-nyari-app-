@@ -1,9 +1,9 @@
 // src/HomeScreen.tsx
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Animated, Easing, StatusBar, StyleSheet, Text, TouchableOpacity, View, AppState, Image } from "react-native";
+import { Animated, Easing, StatusBar, StyleSheet, Text, TouchableOpacity, View, AppState, Image, RefreshControl } from "react-native"; // ⚡ RefreshControl ઉમેર્યું
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from '@react-native-async-storage/async-storage'; // ⚡ પોપઅપ ફિક્સ માટે
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchProfile, fetchTopSponsors, getCachedMobile, onProfileChanged, fetchDonationStats, fetchActivePopup, subscribeLivePopups, type Sponsor, type AppPopup } from "./supabaseClient";
 import { TopDonorsSlider, LiveDonationBanner } from "./components/HomeComponents";
 import RecentDonorsSection from "./components/RecentDonorsSection";
@@ -26,7 +26,6 @@ function sponsorToSlider(s: Sponsor, index: number): SliderDonor {
   };
 }
 
-// ⚡ આખી સ્ક્રીન માટે એક જ મોટું સ્કેલેટન
 const HomePageSkeleton = React.memo(() => {
   const pulse = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
@@ -85,10 +84,11 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
   const [popupVisible, setPopupVisible] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   
-  // ⚡ એનિમેશન માટેના વેરિયેબલ્સ
+  // ⚡ રિફ્રેશ માટેનું નવું સ્ટેટ
+  const [refreshing, setRefreshing] = useState(false);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(15)).current;
-  
   const popupOpenRef = useRef(false);
 
   useEffect(() => {
@@ -160,7 +160,6 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
     return () => subscription.remove();
   }, [loadStats]);
 
-  // ⚡ સુધારેલું પોપઅપ લોજિક (Date + ID આધારિત - ટેબ બદલવાથી નહીં આવે)
   const loadPopup = useCallback(async (isLiveUpdate = false) => {
     try {
       const p = await fetchActivePopup();
@@ -169,18 +168,15 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
         return;
       }
 
-      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+      const today = new Date().toLocaleDateString('en-CA');
       const currentKey = `${p.id}_${p.updated_at || p.created_at || 'default'}`;
 
       try {
         const savedDataStr = await AsyncStorage.getItem('@last_popup_view');
         let savedData = savedDataStr ? JSON.parse(savedDataStr) : null;
 
-        // જો આજે જોયું નથી અથવા એડમિને નવું પોપઅપ અપડેટ કર્યું છે
         if (!savedData || savedData.date !== today || savedData.key !== currentKey) {
-          
           if (isLiveUpdate && popupOpenRef.current) return;
-
           setPopup(p);
           setPopupVisible(true);
         }
@@ -196,7 +192,6 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
     if (popup) {
       const today = new Date().toLocaleDateString('en-CA');
       const currentKey = `${popup.id}_${popup.updated_at || popup.created_at || 'default'}`;
-      
       try {
         await AsyncStorage.setItem('@last_popup_view', JSON.stringify({ date: today, key: currentKey }));
       } catch (err) {}
@@ -216,6 +211,19 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
       unsub();
     };
   }, [loadPopup]);
+
+  // ⚡ નવું ફંક્શન: જ્યારે યુઝર સ્ક્રીન નીચે ખેંચશે ત્યારે આ રન થશે
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // બધો ડેટા એકસાથે ફરીથી લોડ કરો
+    await Promise.all([
+      loadProfile(), 
+      loadSponsors(), 
+      loadStats(), 
+      loadPopup(false) // પોપઅપ પણ ચેક કરો કે એડમિને નવું નાખ્યું છે કે નહીં
+    ]);
+    setRefreshing(false);
+  }, [loadProfile, loadSponsors, loadStats, loadPopup]);
 
   const headerHeight = insets.top + HEADER_BODY_HEIGHT;
   const clampedScroll = Animated.diffClamp(scrollY, 0, headerHeight);
@@ -257,9 +265,24 @@ const HomeScreen = ({ onTabChange }: { onTabChange?: (tab: string) => void }) =>
           </View>
         </Animated.View>
 
-        <Animated.ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} bounces scrollEventThrottle={16}
+        <Animated.ScrollView 
+          style={styles.scroll} 
+          showsVerticalScrollIndicator={false} 
+          bounces 
+          scrollEventThrottle={16}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
           contentContainerStyle={[styles.content, { paddingTop: headerHeight + 10, paddingBottom: insets.bottom + 24 }]}
+          
+          // ⚡ અહીં RefreshControl ઉમેર્યું છે
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.teal]} // એન્ડ્રોઇડ માટે સ્પિનરનો કલર
+              tintColor={COLORS.teal} // iOS માટે સ્પિનરનો કલર
+              progressBackgroundColor="#FFFFFF"
+            />
+          }
         >
           {sponsors.length > 0 ? <TopDonorsSlider donors={sponsors} variant="sponsor" /> : (
             <View style={styles.emptySponsors}>
