@@ -1,18 +1,88 @@
-// App.tsx
-import React from 'react';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { ErrorBoundary } from './src/components/ErrorBoundary'; // ⚡ ઉમેર્યું
-
-import Navigation from './src/Navigation';
-
-export default function App() {
-  return (
-    <ErrorBoundary>
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <Navigation />
-      </SafeAreaProvider>
-    </ErrorBoundary>
-  );
+{
+  "expo": {
+    "name": "TEAM NYARI",
+    "slug": "team-nyari",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./asset.png",
+    "scheme": "teamnyari",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./asset.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F6F9F8"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.teamnyari.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "TEAM NYARI uses the camera for your profile photo.",
+        "NSPhotoLibraryUsageDescription": "TEAM NYARI accesses your gallery to select a profile photo.",
+        "NSLocationWhenInUseUsageDescription": "TEAM NYARI uses your location to add to your profile.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TEAM NYARI uses your location to add to your profile.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.teamnyari.app",
+      "versionCode": 2,
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TEAM NYARI accesses your photos to let you upload a profile picture.",
+          "cameraPermission": "TEAM NYARI uses the camera to let you take a profile picture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "TEAM NYARI uses your location to verify your address."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "newArchEnabled": true,
+            "enableHermes": true
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./asset.png",
+          "imageWidth": 150,
+          "resizeMode": "contain",
+          "backgroundColor": "#F6F9F8"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "670b445c-1ddf-43c2-ba44-0fb5c72cf66c"
+      }
+    }
+  }
 }
