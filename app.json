@@ -68,6 +68,15 @@
             "deploymentTarget": "15.1"
           }
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./asset.png",
+          "imageWidth": 150,
+          "resizeMode": "contain",
+          "backgroundColor": "#F6F9F8"
+        }
       ]
     ],
     "extra": {
