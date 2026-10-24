@@ -562,9 +562,14 @@ const VideoDonationCard: React.FC<VideoDonationCardProps> = ({ cases: suppliedCa
       refreshTimerRef.current = setTimeout(silentRefresh, 600);
     });
     const poll = setInterval(() => { if (!isLiveHealthy()) silentRefresh(); }, 12000);
+    // App background mathi pachi aave tyare turant fresh data lavo (realtime socket background ma band thai jay che)
+    const appSub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') silentRefresh();
+    });
     return () => {
       unsub();
       clearInterval(poll);
+      appSub.remove();
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, [suppliedCases, silentRefresh]);
